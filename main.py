@@ -33,6 +33,13 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET_NAME")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Placeholder configuration
+R2_PUBLIC_BASE_URL = os.getenv("R2_PUBLIC_BASE_URL", "").rstrip("/")
+PLACEHOLDER_NAME = os.getenv("PLACEHOLDER_NAME", "placeholder.jpg")
+
+# The URL that will be set in the database for placeholder images
+DATABASE_PLACE_HOLDER_URL = f"{R2_PUBLIC_BASE_URL}/{PLACEHOLDER_NAME}"
+
 # Check command line argument for dry run, default to False (matching DRY_RUN = false in TS)
 # We support '--dry-run' CLI argument to override
 DRY_RUN = True
@@ -47,16 +54,11 @@ LIGHT_BLUE_THRESHOLD = 20  # min % of light-blue pixels (background)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Validate environment variables early
-if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET]):
+if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET, R2_PUBLIC_BASE_URL]):
     print(
-        "❌ Missing required R2 env vars. Check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME in your .env",
+        "❌ Missing required env vars. Check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_BASE_URL in your .env",
         file=sys.stderr
     )
-    sys.exit(1)
-# Ensure placeholder image URL is provided
-PLACEHOLDER_IMAGE_URL = os.getenv('PLACEHOLDER_IMAGE_URL')
-if not PLACEHOLDER_IMAGE_URL:
-    print("❌ Missing required env var PLACEHOLDER_IMAGE_URL. Set it in .env or the environment.", file=sys.stderr)
     sys.exit(1)
 
 # ─── R2 CLIENT ───────────────────────────────────────────────────────────────
@@ -105,10 +107,7 @@ def is_placeholder(image_bytes: bytes) -> bool:
 
 def build_public_url(key: str) -> str:
     """Helper: build public URL for a given object key."""
-    base = os.getenv("R2_PUBLIC_BASE_URL", "").rstrip("/")
-    if not base:
-        base = f"https://{R2_BUCKET}.r2.cloudflarestorage.com"
-    return f"{base}/{key}"
+    return f"{R2_PUBLIC_BASE_URL}/{key}"
 
 def list_all_images():
     """Yield all image keys in the bucket (no prefix — flat bucket)."""
@@ -153,24 +152,16 @@ def import_placeholder_image(key: str = "placeholder.jpg") -> str:
         ContentType=content_type
     )
 
-    return f"https://{R2_BUCKET}.r2.cloudflarestorage.com/{key}"
+    return f"{R2_PUBLIC_BASE_URL}/{key}"
 
 def set_placeholder_image() -> str:
     """Set placeholder image based on PLACEHOLDER_NAME env var."""
-    placeholder_name = os.getenv("PLACEHOLDER_NAME")
-    if not placeholder_name:
-        raise ValueError("PLACEHOLDER_NAME environment variable must be set")
-
     # Build the public URL for the expected placeholder location
-    public_base = os.getenv("R2_PUBLIC_BASE_URL", "").rstrip("/")
-    if not public_base:
-        public_base = f"https://{R2_BUCKET}.r2.cloudflarestorage.com"
-    public_url = f"{public_base}/{placeholder_name}"
+    public_url = DATABASE_PLACE_HOLDER_URL
 
     # Try a HEAD request to see if the object already exists publicly
     try:
         head_resp = requests.head(public_url)
-        print(public_url)
         if head_resp.ok:
             print(f"Existing placeholder found: {public_url}")
             return public_url
@@ -178,7 +169,7 @@ def set_placeholder_image() -> str:
         print(f"Placeholder existence check failed: {err}", file=sys.stderr)
 
     # If the placeholder is not present, upload it
-    uploaded_url = import_placeholder_image(placeholder_name)
+    uploaded_url = import_placeholder_image(PLACEHOLDER_NAME)
     print(f"New placeholder uploaded: {uploaded_url}")
     return uploaded_url
 
@@ -220,7 +211,7 @@ def main():
                     # Extract NPI from filename (remove extension)
                     npi = os.path.splitext(key)[0]
                     # Use the placeholder image URL from the environment for DB updates
-                    placeholder_url = PLACEHOLDER_IMAGE_URL
+                    placeholder_url = DATABASE_PLACE_HOLDER_URL
 
                     # Update database if connected
                     if conn:
