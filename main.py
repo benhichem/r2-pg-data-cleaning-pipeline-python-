@@ -49,9 +49,14 @@ LIGHT_BLUE_THRESHOLD = 20  # min % of light-blue pixels (background)
 # Validate environment variables early
 if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET]):
     print(
-        "❌ Missing required env vars. Check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME in your .env",
+        "❌ Missing required R2 env vars. Check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME in your .env",
         file=sys.stderr
     )
+    sys.exit(1)
+# Ensure placeholder image URL is provided
+PLACEHOLDER_IMAGE_URL = os.getenv('PLACEHOLDER_IMAGE_URL')
+if not PLACEHOLDER_IMAGE_URL:
+    print("❌ Missing required env var PLACEHOLDER_IMAGE_URL. Set it in .env or the environment.", file=sys.stderr)
     sys.exit(1)
 
 # ─── R2 CLIENT ───────────────────────────────────────────────────────────────
@@ -214,7 +219,8 @@ def main():
                     
                     # Extract NPI from filename (remove extension)
                     npi = os.path.splitext(key)[0]
-                    public_url = build_public_url(key)
+                    # Use the placeholder image URL from the environment for DB updates
+                    placeholder_url = PLACEHOLDER_IMAGE_URL
 
                     # Update database if connected
                     if conn:
@@ -222,10 +228,10 @@ def main():
                             with conn.cursor() as cur:
                                 cur.execute(
                                     "UPDATE doctors SET image_url = %s WHERE npi = %s",
-                                    (public_url, npi)
+                                    (placeholder_url, npi)
                                 )
                             conn.commit()
-                            print(f"[db] image_url updated for NPI {npi}")
+                            print(f"[db] image_url updated for NPI {npi} with placeholder URL")
                         except Exception as db_err:
                             print(f"[db] failed to update image_url for NPI {npi}: {db_err}", file=sys.stderr)
                             try:
