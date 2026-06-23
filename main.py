@@ -154,6 +154,34 @@ def import_placeholder_image(key: str = "placeholder.jpg") -> str:
 
     return f"{R2_PUBLIC_BASE_URL}/{key}"
 
+
+def import_placeholder_from_local(local_path: str, key: str = "placeholder.jpg") -> str:
+    """Import a placeholder image from a local file path and upload it to R2."""
+    import mimetypes
+
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"Local file not found: {local_path}")
+
+    if not os.path.isfile(local_path):
+        raise ValueError(f"Path is not a file: {local_path}")
+
+    # Guess content type from file extension
+    content_type, _ = mimetypes.guess_type(local_path)
+    if not content_type:
+        content_type = "application/octet-stream"
+
+    with open(local_path, "rb") as f:
+        file_content = f.read()
+
+    s3_client.put_object(
+        Bucket=R2_BUCKET,
+        Key=key,
+        Body=file_content,
+        ContentType=content_type
+    )
+
+    return f"{R2_PUBLIC_BASE_URL}/{key}"
+
 def set_placeholder_image() -> str:
     """Set placeholder image based on PLACEHOLDER_NAME env var."""
     # Build the public URL for the expected placeholder location
